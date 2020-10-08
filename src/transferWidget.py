@@ -28,13 +28,16 @@ import numpy as np
 class TransferWidget(qtw.QGroupBox):
     
     imageLoaded = qtc.pyqtSignal(np.ndarray)
-    transferStarted = qtc.pyqtSignal()
+    transferStarted = qtc.pyqtSignal(np.ndarray)
     transferStopped = qtc.pyqtSignal()
     
     WIDGET_TITLE = 'Modem options'
     
     def __init__(self, parent = None):
         super().__init__(parent)
+        
+        self.imageSize = 0
+        self.imageSource = []
         
         self._setupUi()
     
@@ -94,23 +97,67 @@ class TransferWidget(qtw.QGroupBox):
         )
         if fileName:
             image = mpimg.imread(fileName) 
-            self.fileLabel.setText(f'Size: {image.size} bytes')
-            self.startButton.setEnabled(True)
-            self.stopButton.setEnabled(False)
-            self.imageLoaded.emit(image)
+            if self._processImage(image):                 
+                self.fileLabel.setText(f'Size: {self.imageSize} bytes')
+                self.startButton.setEnabled(True)
+                self.stopButton.setEnabled(False)
+                self.imageLoaded.emit(image)
+            else:
+                self.fileLabel.setText('No file')
+                self.startButton.setEnabled(False)
+                self.stopButton.setEnabled(False)   
         else:
             self.fileLabel.setText('No file')
             self.startButton.setEnabled(False)
             self.stopButton.setEnabled(False)
+            
+    def _processImage(self, image):       
+        # remove alpha channel
+        if image.shape[2] == 4:
+            image = image[:, :, 0:3]
+        image = (image * np.iinfo(np.uint8).max).astype(np.uint8)
+        self.imageSize = image.size
+        
+        dataType = 2 # type of image data
+        dataType = np.atleast_1d(np.uint8(dataType))
+        imageWidth = image.shape[0]
+        if imageWidth > np.iinfo(np.uint16).max:
+            self.showError('Too much width of image.')
+            return False
+        else:
+            imageWidth = np.atleast_1d(np.uint16(imageWidth)).view(np.uint8)
+        imageHeight = image.shape[1]
+        if imageHeight > np.iinfo(np.uint16).max:
+            self.showError('Too much height of image.')
+            return False
+        else:
+            imageHeight = np.atleast_1d(np.uint16(imageHeight)).view(np.uint8)    
+        
+        dataSizeByte = 1 + 2 + 2 + image.size
+        if dataSizeByte > np.iinfo(np.uint32).max:
+            self.showError('Too much size of image.')
+            return False
+        else:
+            dataSizeByte = np.atleast_1d(np.uint32(dataSizeByte)).view(np.uint8)
+         
+        self.imageSource = np.concatenate((dataType, imageHeight, imageWidth, np.ravel(image))) 
+        return True
+            
+    @qtc.pyqtSlot(str)
+    def showError(self, text):
+        qtw.QMessageBox.warning(
+            self,
+            'Transfer Error',
+            text)    
     
     @qtc.pyqtSlot()
     def _startTransfer(self):
         self.typeWidget.setEnabled(False)
         self.startButton.setEnabled(False)
-        self.stopButton.setEnabled(True)        
+        self.stopButton.setEnabled(True)
         self.loadButton.setEnabled(False)
         
-        self.transferStarted.emit()
+        self.transferStarted.emit(self.imageSource)
     
     @qtc.pyqtSlot()
     def _stopTransfer(self):

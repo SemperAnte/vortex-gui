@@ -28,18 +28,22 @@ from PyQt5 import QtCore as qtc
 
 import time
 import utility
+
+import sys
+sys.path.append('res')
+import resources
         
 class ConnectionWidget(qtw.QGroupBox):
     
-    commandSend = qtc.pyqtSignal()
+    connectionRequested = qtc.pyqtSignal(dict)
     
     WIDGET_TITLE = 'Connection options'
-    DEFAULT_IP_PORT = 10204
+    DEFAULT_IP_PORT = 10205
     MIN_IP_PORT = 0
     MAX_IP_PORT = 2**16 - 1
-    DEFAULT_IP_ADDRESS = '192.168.1.180'    
-    CONNECTION_BUTTON_ON_ICON_PATH = 'res\\connectionButtonOn.png'
-    CONNECTION_BUTTON_OFF_ICON_PATH = 'res\\connectionButtonOff.png'
+    DEFAULT_IP_ADDRESS = '192.168.1.181'    
+    CONNECTION_BUTTON_ON_ICON_PATH = ':\\images\\connectionButtonOn.png'
+    CONNECTION_BUTTON_OFF_ICON_PATH = ':\\images\\connectionButtonOff.png'
     STATUS_LABEL = 'Status: '
     
     def __init__(self, parent = None):
@@ -173,9 +177,27 @@ class ConnectionWidget(qtw.QGroupBox):
         
     @qtc.pyqtSlot(bool)
     def _clickConnectionButton(self, state):      
-        _ConnectingWindow.show(self)
-        self.commandSend.emit()
-        self.connectionStatus = state
+        _ConnectingWindow.show(self)        
+        if self.connectionStatus: # request for disconnection
+            request = {'action': 'Disconnection'}
+        else: # request for connection
+            request = {'action': 'Connection',
+                       'type': self.type.currentText(),
+                       'protocol': self.protocol.currentText(),
+                       'ip': self.ipAdr.text(),
+                       'port': self.ipPort.value()}        
+        self.connectionRequested.emit(request)
+        
+    @qtc.pyqtSlot(bool)
+    def changeConnectionStatus(self, conStatus):
+        self.connectionStatus = conStatus
+        
+    @qtc.pyqtSlot(str)
+    def showError(self, text):
+        qtw.QMessageBox.warning(
+            self,
+            'Connection Error',
+            text)
         
     def _openEmulationFile(self):
         fileName, _ = qtw.QFileDialog.getOpenFileName(
@@ -210,7 +232,7 @@ class _ConnectingWindow(qtw.QDialog):
         win.open()
         qtw.QApplication.processEvents()
         time.sleep(_ConnectingWindow.WAITING_TIME)
-        win.accept()        
+        win.accept()
         
 # simple test
 if __name__ == '__main__':
